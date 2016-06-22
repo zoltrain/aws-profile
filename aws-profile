@@ -78,18 +78,12 @@ get_creds_from_sts() {
 
 is_creds_valid() {
     if [ -f "$FULL_PATH" ]; then
-        expiry="$(echo "$creds" | jq ".Credentials.Expiration")"
-        value=$(python -c "import time
-import datetime
-value=$expiry
-expiry = datetime.datetime.strptime(value, \"%Y-%m-%dT%H:%M:%SZ\")
-now = datetime.datetime.utcnow()
-print(now < expiry)")
-        if [ "$value" = "True" ]; then 
-            return 0
-        else
-            return 1
-        fi
+        expiry="$(echo "$creds" | jq -r ".Credentials.Expiration")"
+        python -c "import sys
+from datetime import *
+expiry = datetime.strptime(sys.argv[1], \"%Y-%m-%dT%H:%M:%SZ\")
+sys.exit(0 if datetime.utcnow() < expiry else 1)" "$expiry"
+        return $?
     else
         return 1
     fi
