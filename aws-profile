@@ -2,7 +2,7 @@
 
 profile=$1; shift
 
-CACHE_DIR=~/.aws/aws-profile/cache
+CACHE_DIR=~/.aws/cli/cache
 mkdir -p "$CACHE_DIR"
 EXPIRY_SECONDS=3600
 
@@ -41,8 +41,8 @@ save_creds_to_cache() {
 }
 
 create_cache_key(){
-    key="$(echo "$role_arn" | sed 's/:/-/g' | sed 's/\//-/g')" 
-    CACHE_KEY="$profile--$key"
+    key="$(echo "$role_arn" | sed 's/:/_/g' | sed 's/\//-/g')" 
+    CACHE_KEY="${profile}--${key}"
 }
 
 set_full_path() {
