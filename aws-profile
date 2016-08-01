@@ -7,97 +7,99 @@ mkdir -p "$CACHE_DIR"
 EXPIRY_SECONDS=3600
 
 read_config() {
-    mfa_serial="$(aws configure get mfa_serial --profile "$profile")"
-    source_profile="$(aws configure get source_profile --profile "$profile")"
-    role_arn="$(aws configure get role_arn --profile "$profile")"
+  mfa_serial="$(aws configure get mfa_serial --profile "$profile")"
+  source_profile="$(aws configure get source_profile --profile "$profile")"
+  role_arn="$(aws configure get role_arn --profile "$profile")"
 
-    if [ -n "$source_profile" ]; then
-        aws_access_key_id="$(aws configure get aws_access_key_id --profile "$source_profile")"
-        aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$source_profile")"
-        region="$(aws configure get region --profile "$source_profile")"
-    else
-        aws_access_key_id="$(aws configure get aws_access_key_id --profile "$profile")"
-        aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$profile")"
-        region="$(aws configure get region --profile "$profile")"
-    fi
-    export AWS_ACCESS_KEY_ID="$aws_access_key_id"
-    export AWS_SECRET_ACCESS_KEY="$aws_secret_access_key"
-    export AWS_DEFAULT_REGION="$region"
+  if [ -n "$source_profile" ]; then
+    aws_access_key_id="$(aws configure get aws_access_key_id --profile "$source_profile")"
+    aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$source_profile")"
+    region="$(aws configure get region --profile "$source_profile")"
+    export AWS_DEFAULT_PROFILE="$source_profile"
+  else
+    aws_access_key_id="$(aws configure get aws_access_key_id --profile "$profile")"
+    aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$profile")"
+    region="$(aws configure get region --profile "$profile")"
+  fi
+  export AWS_ACCESS_KEY_ID="$aws_access_key_id"
+  export AWS_SECRET_ACCESS_KEY="$aws_secret_access_key"
+  export AWS_DEFAULT_REGION="$region"
 }
 
 
 load_creds_from_cache() {
-    if [ -f "$FULL_PATH" ]; then
-        creds="$(cat "$FULL_PATH")"
-    fi
+  if [ -f "$FULL_PATH" ]; then
+    creds="$(cat "$FULL_PATH")"
+  fi
 }
 
 save_creds_to_cache() {
-    if [ -f "$FULL_PATH" ]; then
-        echo "$creds" > "$FULL_PATH"
-    else
-        echo "$creds" >> "$FULL_PATH"
-    fi
+  if [ -f "$FULL_PATH" ]; then
+    echo "$creds" > "$FULL_PATH"
+  else
+    echo "$creds" >> "$FULL_PATH"
+  fi
 }
 
 create_cache_key(){
-    key="$(echo "$role_arn" | sed 's/:/_/g' | sed 's/\//-/g')" 
-    CACHE_KEY="${profile}--${key}"
+  key="$(echo "$role_arn" | sed 's/:/-/g' | sed 's/\//-/g')" 
+  CACHE_KEY="$profile--$key"
 }
 
 set_full_path() {
-    create_cache_key
-    FULL_PATH="$CACHE_DIR/${CACHE_KEY}.json"
+  create_cache_key
+  FULL_PATH="$CACHE_DIR/${CACHE_KEY}.json"
 }
 
 set_aws_vars() {
-    AWS_SECRET_ACCESS_KEY="$(echo "$creds" | jq -r ".Credentials.SecretAccessKey")"
-    AWS_ACCESS_KEY_ID="$(echo "$creds" | jq -r ".Credentials.AccessKeyId")"
-    AWS_SECURITY_TOKEN="$(echo "$creds" | jq -r ".Credentials.SessionToken")"
+  AWS_SECRET_ACCESS_KEY="$(echo "$creds" | jq -r ".Credentials.SecretAccessKey")"
+  AWS_ACCESS_KEY_ID="$(echo "$creds" | jq -r ".Credentials.AccessKeyId")"
+  AWS_SECURITY_TOKEN="$(echo "$creds" | jq -r ".Credentials.SessionToken")"
+  AWS_SESSION_TOKEN="$AWS_SECURITY_TOKEN"
 }
 
 get_creds_from_sts() {
-    if [ -n "$mfa_serial" ]; then
-        echo "please enter your MFA code"
-        read -r token_code
-        args=("--token-code" "$token_code" "--serial-number" "$mfa_serial")
-    fi
-        
-    role_session_name="AWS-Profile-session-$(date +%s)"
-    if [ ${#args[@]} -gt 0 ]; then
-        creds="$(aws sts assume-role --role-arn "$role_arn" --role-session-name="$role_session_name" \
-        --duration-seconds "$EXPIRY_SECONDS" \
-        "${args[@]}")"
-    else
-        creds="$(aws sts assume-role --role-arn "$role_arn" --role-session-name="$role_session_name" \
-        --duration-seconds "$EXPIRY_SECONDS")"
-    fi
-    # Save the creds to the cache file
-    save_creds_to_cache
+  if [ -n "$mfa_serial" ]; then
+    echo "please enter your MFA code"
+    read -r token_code
+    args=("--token-code" "$token_code" "--serial-number" "$mfa_serial")
+  fi
+      
+  role_session_name="AWS-Profile-session-$(date +%s)"
+  if [ ${#args[@]} -gt 0 ]; then
+    creds="$(aws sts assume-role --role-arn "$role_arn" --role-session-name="$role_session_name" \
+    --duration-seconds "$EXPIRY_SECONDS" \
+    "${args[@]}")"
+  else
+    creds="$(aws sts assume-role --role-arn "$role_arn" --role-session-name="$role_session_name" \
+    --duration-seconds "$EXPIRY_SECONDS")"
+  fi
+  # Save the creds to the cache file
+  save_creds_to_cache
 }
 
 is_creds_valid() {
-    if [ -f "$FULL_PATH" ]; then
-        expiry="$(echo "$creds" | jq -r ".Credentials.Expiration")"
-        python -c "import sys
+  if [ -f "$FULL_PATH" ]; then
+    expiry="$(echo "$creds" | jq -r ".Credentials.Expiration")"
+    python -c "import sys
 from datetime import *
 expiry = datetime.strptime(sys.argv[1], \"%Y-%m-%dT%H:%M:%SZ\")
 sys.exit(0 if datetime.utcnow() < expiry else 1)" "$expiry"
-        return $?
-    else
-        return 1
-    fi
+    return $?
+  else
+    return 1
+  fi
 }
 
 
 load_creds() {
-    set_full_path
-    load_creds_from_cache
-    is_creds_valid
-    if [ $? -eq 1 ] || [ -z "$creds" ]; then
-        get_creds_from_sts
-    fi
-    set_aws_vars
+  set_full_path
+  load_creds_from_cache
+  is_creds_valid
+  if [ $? -eq 1 ] || [ -z "$creds" ]; then
+    get_creds_from_sts
+  fi
+  set_aws_vars
 }
 
 
@@ -111,6 +113,8 @@ read_config
 load_creds
 export AWS_SECRET_ACCESS_KEY
 export AWS_ACCESS_KEY_ID
+export AWS_SESSION_TOKEN
 export AWS_SECURITY_TOKEN
+export AWS_DEFAULT_PROFILE
 
 exec "$@"
