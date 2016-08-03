@@ -15,15 +15,14 @@ read_config() {
     aws_access_key_id="$(aws configure get aws_access_key_id --profile "$source_profile")"
     aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$source_profile")"
     region="$(aws configure get region --profile "$source_profile")"
-    export AWS_DEFAULT_PROFILE="$source_profile"
   else
     aws_access_key_id="$(aws configure get aws_access_key_id --profile "$profile")"
     aws_secret_access_key="$(aws configure get aws_secret_access_key --profile "$profile")"
     region="$(aws configure get region --profile "$profile")"
   fi
-  export AWS_ACCESS_KEY_ID="$aws_access_key_id"
-  export AWS_SECRET_ACCESS_KEY="$aws_secret_access_key"
-  export AWS_DEFAULT_REGION="$region"
+  AWS_ACCESS_KEY_ID="$aws_access_key_id"
+  AWS_SECRET_ACCESS_KEY="$aws_secret_access_key"
+  AWS_DEFAULT_REGION="$region"
 }
 
 
@@ -42,7 +41,7 @@ save_creds_to_cache() {
 }
 
 create_cache_key(){
-  key="$(echo "$role_arn" | sed 's/:/-/g' | sed 's/\//-/g')" 
+  key="$(echo "$role_arn" | sed 's/:/_/g' | sed 's/\//-/g')" 
   CACHE_KEY="$profile--$key"
 }
 
@@ -55,7 +54,7 @@ set_aws_vars() {
   AWS_SECRET_ACCESS_KEY="$(echo "$creds" | jq -r ".Credentials.SecretAccessKey")"
   AWS_ACCESS_KEY_ID="$(echo "$creds" | jq -r ".Credentials.AccessKeyId")"
   AWS_SECURITY_TOKEN="$(echo "$creds" | jq -r ".Credentials.SessionToken")"
-  AWS_SESSION_TOKEN="$AWS_SECURITY_TOKEN"
+  AWS_SESSION_TOKEN="$(echo "$creds" | jq -r ".Credentials.SessionToken")"
 }
 
 get_creds_from_sts() {
@@ -113,8 +112,8 @@ read_config
 load_creds
 export AWS_SECRET_ACCESS_KEY
 export AWS_ACCESS_KEY_ID
-export AWS_SESSION_TOKEN
 export AWS_SECURITY_TOKEN
-export AWS_DEFAULT_PROFILE
+export AWS_DEFAULT_REGION
+export AWS_SESSION_TOKEN
 
 exec "$@"
